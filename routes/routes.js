@@ -4,6 +4,20 @@ const Vendor = require("../models/vendor.model");
 module.exports = async function (fastify, opts) {
   fastify.register(
     function (fastify, opts, done) {
+      fastify.get("/all-vendors", async (req, reply) => {
+        try {
+          const allVendors = await Vendor.find({});
+
+          if (!allVendors) {
+            return reply.code(400).send({ message: "No vendors available" });
+          }
+
+          reply.send({ allVendors, message: "All Vendors received" });
+        } catch (error) {
+          console.log(error);
+        }
+      });
+
       fastify.post("/vendor-register", async (req, reply) => {
         const { vendor_name, vendor_email, vendor_contact, instagram_account } =
           req.body;
@@ -48,7 +62,7 @@ module.exports = async function (fastify, opts) {
             return reply.code(400).send({ message: "No service available" });
           }
 
-          reply.send({ allServices, msg: "All Services received" });
+          reply.send({ allServices, message: "All Services received" });
         } catch (error) {
           console.log(error);
         }
