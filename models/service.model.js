@@ -19,12 +19,24 @@ const ServiceSchema = new Schema({
     enum: ["active", "inactive", "pending"],
     required: true,
   },
-  service_code: {
-    type: Number,
-    required: true,
-  },
+  availability: [
+    {
+      date: { type: Date, required: true },
+      availableSeats: { type: Number, required: true },
+    },
+  ],
   category: {
     type: String,
+    required: true,
+  },
+  cost_per_seat: {
+    type: Number,
+    required: function () {
+      return this.service_type === "PD" || this.service_type === "P";
+    },
+  },
+  service_code: {
+    type: Number,
     required: true,
   },
 });
