@@ -2,6 +2,7 @@ const Service = require("../models/service.model");
 const Vendor = require("../models/vendor.model");
 const requestPasswordReset = require("../service/auth.service");
 const bcrypt = require("bcrypt");
+const Authenticate = require("../middleware/auth.middleware");
 
 module.exports = async function (fastify, opts) {
   fastify.register(
@@ -202,66 +203,84 @@ module.exports = async function (fastify, opts) {
 
       // --------------- SERVICE --------------- //
 
-      fastify.post("/add-service", async (req, reply) => {
-        const {
-          service_name,
-          service_description,
-          service_type,
-          service_status,
-          availability,
-          cost_per_seat,
-          category,
-        } = req.body;
-
-        if (
-          !service_name ||
-          !service_description ||
-          !service_type ||
-          !service_status ||
-          !availability ||
-          !cost_per_seat ||
-          !category
-        ) {
-          return reply.code(400).send({ message: "Fields are required" });
-        }
-
-        const generateServiceCode = () => {
-          const min = 100000000000;
-          const max = 999999999999;
-          return Math.floor(Math.random() * (max - min + 1)) + min;
-        };
-
-        const service_code = generateServiceCode();
-
-        try {
-          const serviceExist = await Service.findOne({
-            service_name: service_name,
-          });
-
-          if (serviceExist) {
-            return reply.code(403).send({
-              message: "Service is already exist",
-            });
-          }
-
-          const service = await new Service({
+      fastify.post(
+        "/add-service",
+        { preHandler: Authenticate },
+        async (req, reply) => {
+          const {
             service_name,
             service_description,
             service_type,
             service_status,
-            service_code,
             availability,
             cost_per_seat,
             category,
-          });
+          } = req.body;
 
-          await service.save();
+          if (
+            !service_name ||
+            !service_description ||
+            !service_type ||
+            !service_status ||
+            !availability ||
+            !cost_per_seat ||
+            !category
+          ) {
+            return reply.code(400).send({ message: "Fields are required" });
+          }
 
-          reply.code(201).send({ message: "Service added successfully" });
-        } catch (error) {
-          console.log(error);
+          const generateServiceCode = () => {
+            const min = 100000000000;
+            const max = 999999999999;
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+          };
+
+          const service_code = generateServiceCode();
+
+          try {
+            const serviceExist = await Service.findOne({
+              service_name: service_name,
+            });
+
+            if (serviceExist) {
+              return reply.code(403).send({
+                message: "Service is already exist",
+              });
+            }
+
+            const serviceData = {
+              service_name,
+              service_description,
+              service_type,
+              service_status,
+              service_code,
+              availability,
+              category,
+            };
+
+            if (service_type === "BK" || service_type === "I") {
+              delete serviceData.cost_per_seat;
+            } else {
+              serviceData.cost_per_seat = cost_per_seat;
+            }
+
+            const service = await new Service(serviceData);
+
+            await service.save();
+
+            const currentVendorID = req.vendorID;
+            const vendor = await Vendor.findById(currentVendorID);
+
+            vendor.services.push(service._id);
+
+            await vendor.save();
+
+            reply.code(201).send({ message: "Service added successfully" });
+          } catch (error) {
+            console.log(error);
+          }
         }
-      });
+      );
 
       fastify.get("/all-services", async (req, reply) => {
         try {
@@ -272,6 +291,28 @@ module.exports = async function (fastify, opts) {
           }
 
           reply.send({ allServices, message: "All Services received" });
+        } catch (error) {
+          reply.code(400).send({ err: error });
+        }
+      });
+
+      fastify.get("/service/:id", async (req, reply) => {
+        const serviceID = req.params.id;
+
+        if (!serviceID) {
+          return reply.code(400).send({ message: "Provide proper service id" });
+        }
+
+        try {
+          const service = await Service.findById(serviceID);
+
+          if (!service) {
+            return reply
+              .code(422)
+              .send({ message: `Service not found with id: ${serviceID}` });
+          }
+
+          reply.code(200).send({ service, message: "Service found" });
         } catch (error) {
           reply.code(400).send({ err: error });
         }
