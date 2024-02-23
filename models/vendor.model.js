@@ -1,5 +1,6 @@
 const { Schema, mongoose } = require("mongoose");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 const VendorSchema = new Schema({
   vendor_name: {
@@ -25,6 +26,15 @@ const VendorSchema = new Schema({
     type: Boolean,
     default: false,
   },
+  services: [
+    {
+      type: Schema.Types.ObjectId,
+      ref: "Service",
+    },
+  ],
+  token: {
+    type: String,
+  },
 });
 
 VendorSchema.pre("save", async function (next) {
@@ -40,5 +50,17 @@ VendorSchema.pre("save", async function (next) {
   this.password = hashedPassword;
   next();
 });
+
+VendorSchema.methods.generateAuthToken = async function () {
+  try {
+    const token = jwt.sign({ _id: this._id }, process.env.JWT_SECRET);
+    this.token = token;
+    await this.save();
+
+    return token;
+  } catch (error) {
+    console.log(error);
+  }
+};
 
 module.exports = mongoose.model("Vendor", VendorSchema);

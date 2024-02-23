@@ -1,6 +1,7 @@
 const Service = require("../models/service.model");
 const Vendor = require("../models/vendor.model");
 const requestPasswordReset = require("../service/auth.service");
+const bcrypt = require("bcrypt");
 
 module.exports = async function (fastify, opts) {
   fastify.register(
@@ -46,6 +47,41 @@ module.exports = async function (fastify, opts) {
             .send({ message: "Vendor Account created successfully" });
         } catch (error) {
           console.log(error);
+        }
+      });
+
+      fastify.post("/vendor-login", async (req, reply) => {
+        const { vendor_email, password } = req.body;
+
+        if (!vendor_email || !password) {
+          return reply.code(400).send({ message: "Fill required data" });
+        }
+
+        try {
+          const vendor = await Vendor.findOne({ vendor_email });
+
+          if (vendor) {
+            const isPasswordMatch = await bcrypt.compare(
+              password,
+              vendor.password
+            );
+
+            if (!isPasswordMatch) {
+              return reply.code(400).send({ message: "Invalid Credentials" });
+            }
+
+            let jwtoken = await vendor.generateAuthToken();
+
+            reply.header("jwtoken", jwtoken);
+
+            return reply
+              .code(200)
+              .send({ jwtoken, message: "Vendor login success" });
+          } else {
+            return reply.code(422).send({ message: "Vendor not exist" });
+          }
+        } catch (error) {
+          return reply.code(400).send({ err: error });
         }
       });
 
@@ -172,6 +208,8 @@ module.exports = async function (fastify, opts) {
           service_description,
           service_type,
           service_status,
+          availability,
+          cost_per_seat,
           category,
         } = req.body;
 
@@ -180,6 +218,8 @@ module.exports = async function (fastify, opts) {
           !service_description ||
           !service_type ||
           !service_status ||
+          !availability ||
+          !cost_per_seat ||
           !category
         ) {
           return reply.code(400).send({ message: "Fields are required" });
@@ -210,6 +250,8 @@ module.exports = async function (fastify, opts) {
             service_type,
             service_status,
             service_code,
+            availability,
+            cost_per_seat,
             category,
           });
 
@@ -235,10 +277,37 @@ module.exports = async function (fastify, opts) {
         }
       });
 
+      fastify.put("/edit-service/:id", async (req, reply) => {
+        try {
+          const data = req.body;
+          const id = req.params.id;
+
+          const serviceExist = await Service.findById(id);
+
+          if (!serviceExist) {
+            return reply.code(422).send({ message: "Service not exist" });
+          }
+
+          const updatedService = await Service.findByIdAndUpdate(
+            { _id: id },
+            data
+          );
+
+          if (!updatedService) {
+            return reply.code(422).send({ message: "Can not update service" });
+          }
+
+          reply
+            .code(200)
+            .send({ updatedService, message: "Service updated successfully" });
+        } catch (error) {
+          reply.code(400).send({ err: error });
+        }
+      });
+
       fastify.delete("/service/:id", async (req, reply) => {
         try {
           const serviceID = req.params.id;
-          
 
           if (!serviceID) {
             return reply.code(400).send({ message: `Unexpected param` });
@@ -266,10 +335,3 @@ module.exports = async function (fastify, opts) {
     { prefix: "/api/v1" }
   );
 };
-
-
-[
-  { date: "22/02/2024", availableSeats: 10 },
-  { date: "25/02/2024", availableSeats: 34 },
-  { date: "01/03/2024", availableSeats: 0 },
-]
